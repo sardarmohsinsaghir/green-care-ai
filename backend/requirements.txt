@@ -1,8 +1,4 @@
-fastapi
-uvicorn[standard]
 tensorflow
 pillow
 numpy
 streamlit
-requests
-python-multipart
