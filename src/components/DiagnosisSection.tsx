@@ -2,77 +2,55 @@ import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { DiagnosisResults } from "./DiagnosisResults";
 
-// Mock AI diagnosis function
-const mockDiagnosis = async (file: File) => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 3000));
+// Streamlit API configuration
+const STREAMLIT_API_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-streamlit-app.streamlit.app' // Replace with your deployed Streamlit URL
+  : 'http://localhost:8501'; // Local Streamlit development URL
 
-  // Mock results based on filename or random selection
-  const mockDiseases = [
-    {
-      disease: "Powdery Mildew",
-      confidence: 92,
-      severity: 'medium' as const,
-      description: "A fungal disease that appears as white powdery spots on leaves and stems.",
-      treatment: [
-        "Remove affected leaves and dispose of them away from healthy plants",
-        "Improve air circulation around the plant",
-        "Apply fungicidal soap or neem oil spray every 7-10 days",
-        "Reduce humidity levels around the plant",
-        "Water at soil level to avoid wetting leaves"
-      ],
-      prevention: [
-        "Ensure proper spacing between plants for air circulation",
-        "Avoid overhead watering",
-        "Monitor humidity levels regularly",
-        "Apply preventive fungicide during humid seasons",
-        "Remove debris and fallen leaves promptly"
-      ]
-    },
-    {
-      disease: "Leaf Spot Disease",
-      confidence: 87,
-      severity: 'low' as const,
-      description: "Bacterial or fungal infection causing dark spots on leaf surfaces.",
-      treatment: [
-        "Remove infected leaves immediately",
-        "Apply copper-based fungicide spray",
-        "Increase spacing between plants",
-        "Water plants at soil level only",
-        "Disinfect gardening tools between uses"
-      ],
-      prevention: [
-        "Avoid watering leaves directly",
-        "Ensure good drainage in soil",
-        "Rotate crops annually",
-        "Use drip irrigation systems",
-        "Apply mulch to prevent soil splashing"
-      ]
-    },
-    {
-      disease: "Healthy Plant",
-      confidence: 96,
-      severity: 'low' as const,
-      description: "No disease detected. Your plant appears to be in excellent health!",
-      treatment: [
-        "Continue current care routine",
-        "Monitor plant regularly for changes",
-        "Maintain consistent watering schedule",
-        "Ensure adequate lighting conditions",
-        "Check for pests monthly"
-      ],
-      prevention: [
-        "Maintain proper watering schedule",
-        "Provide adequate sunlight exposure",
-        "Use well-draining soil",
-        "Fertilize appropriately for plant type",
-        "Inspect plants regularly for early detection"
-      ]
+// AI diagnosis function that calls Streamlit backend
+const callStreamlitDiagnosis = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const response = await fetch(`${STREAMLIT_API_URL}/predict`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
     }
-  ];
 
-  // Return random result for demonstration
-  return mockDiseases[Math.floor(Math.random() * mockDiseases.length)];
+    const result = await response.json();
+    
+    // Transform Streamlit response to match our expected format
+    return {
+      disease: result.predicted_class || result.disease || 'Unknown Disease',
+      confidence: Math.round((result.confidence || result.probability || 0) * 100),
+      severity: result.severity || 'medium',
+      description: result.description || `Detected: ${result.predicted_class || 'Unknown condition'}`,
+      treatment: result.treatment || [
+        "Consult with a plant specialist for detailed treatment",
+        "Monitor plant closely for changes",
+        "Ensure proper plant care conditions"
+      ],
+      prevention: result.prevention || [
+        "Maintain good plant hygiene",
+        "Provide optimal growing conditions",
+        "Regular monitoring and inspection"
+      ]
+    };
+  } catch (error) {
+    console.error('Streamlit API Error:', error);
+    
+    // Fallback error response
+    throw new Error(
+      error instanceof Error 
+        ? `Analysis failed: ${error.message}` 
+        : 'Unable to connect to analysis service. Please try again later.'
+    );
+  }
 };
 
 const saveDiagnosis = (file: File, result: any) => {
@@ -102,7 +80,7 @@ export const DiagnosisSection = () => {
     // Start analysis
     setIsAnalyzing(true);
     try {
-      const result = await mockDiagnosis(file);
+      const result = await callStreamlitDiagnosis(file);
       setDiagnosisResult(result);
       saveDiagnosis(file, result);
     } catch (error) {
