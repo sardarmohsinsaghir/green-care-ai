@@ -1,8 +1,17 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-tensorflow==2.15.0
-pillow==10.0.1
-numpy==1.24.3
-streamlit==1.28.0
-requests==2.31.0
-python-multipart==0.0.6
+# Install core dependencies first
+pip install numpy==1.24.3
+pip install pillow==10.0.1
+
+# Install web frameworks
+pip install fastapi==0.104.1
+pip install uvicorn[standard]==0.24.0
+pip install python-multipart==0.0.6
+
+# Install HTTP library
+pip install requests==2.31.0
+
+# Install ML framework
+pip install tensorflow==2.13.0
+
+# Install Streamlit last
+pip install streamlit==1.27.0
