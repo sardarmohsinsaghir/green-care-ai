@@ -1,4 +1,8 @@
-pip install numpy==1.24.3
-pip install "tensorflow==2.13.0" --no-deps
-pip install "streamlit==1.27.0" --no-deps
-pip install fastapi==0.104.1 uvicorn[standard]==0.24.0 pillow==10.0.1 requests==2.31.0 python-multipart==0.0.6
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+tensorflow==2.16.1
+pillow==10.3.0
+numpy==1.26.4
+streamlit==1.31.0
+requests==2.31.0
+python-multipart==0.0.9
