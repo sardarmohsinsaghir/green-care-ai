@@ -6,9 +6,10 @@ interface FileUploadProps {
   onFileSelect: (file: File) => void;
   selectedFile: File | null;
   onClearFile: () => void;
+  disabled?: boolean;
 }
 
-export const FileUpload = ({ onFileSelect, selectedFile, onClearFile }: FileUploadProps) => {
+export const FileUpload = ({ onFileSelect, selectedFile, onClearFile, disabled = false }: FileUploadProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +93,7 @@ export const FileUpload = ({ onFileSelect, selectedFile, onClearFile }: FileUplo
             variant="ghost"
             size="sm"
             onClick={onClearFile}
+            disabled={disabled}
             className="flex-shrink-0 text-muted-foreground hover:text-destructive"
           >
             <X className="w-4 h-4" />
@@ -105,11 +107,11 @@ export const FileUpload = ({ onFileSelect, selectedFile, onClearFile }: FileUplo
     <div className="space-y-4">
       {/* Upload Zone */}
       <div
-        className={`upload-zone p-12 text-center ${isDragOver ? 'drag-over' : ''}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={openFileDialog}
+        className={`upload-zone p-12 text-center ${isDragOver ? 'drag-over' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        onDragOver={disabled ? undefined : handleDragOver}
+        onDragLeave={disabled ? undefined : handleDragLeave}
+        onDrop={disabled ? undefined : handleDrop}
+        onClick={disabled ? undefined : openFileDialog}
       >
         <div className="space-y-6">
           {/* Icon */}
@@ -131,9 +133,9 @@ export const FileUpload = ({ onFileSelect, selectedFile, onClearFile }: FileUplo
           </div>
           
           {/* Button */}
-          <Button className="btn-outline">
+          <Button className="btn-outline" disabled={disabled}>
             <Upload className="w-4 h-4 mr-2" />
-            Choose File
+            {disabled ? 'Loading...' : 'Choose File'}
           </Button>
         </div>
       </div>

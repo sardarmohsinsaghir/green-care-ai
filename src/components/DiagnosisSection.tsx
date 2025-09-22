@@ -1,78 +1,109 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import * as tf from '@tensorflow/tfjs';
 import { FileUpload } from "./FileUpload";
 import { DiagnosisResults } from "./DiagnosisResults";
 
-// Mock AI diagnosis function
-const mockDiagnosis = async (file: File) => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 3000));
+// Load treatment dictionary
+let treatmentDict: any = null;
+let model: tf.LayersModel | null = null;
 
-  // Mock results based on filename or random selection
-  const mockDiseases = [
-    {
-      disease: "Powdery Mildew",
-      confidence: 92,
-      severity: 'medium' as const,
-      description: "A fungal disease that appears as white powdery spots on leaves and stems.",
-      treatment: [
-        "Remove affected leaves and dispose of them away from healthy plants",
-        "Improve air circulation around the plant",
-        "Apply fungicidal soap or neem oil spray every 7-10 days",
-        "Reduce humidity levels around the plant",
-        "Water at soil level to avoid wetting leaves"
-      ],
-      prevention: [
-        "Ensure proper spacing between plants for air circulation",
-        "Avoid overhead watering",
-        "Monitor humidity levels regularly",
-        "Apply preventive fungicide during humid seasons",
-        "Remove debris and fallen leaves promptly"
-      ]
-    },
-    {
-      disease: "Leaf Spot Disease",
-      confidence: 87,
-      severity: 'low' as const,
-      description: "Bacterial or fungal infection causing dark spots on leaf surfaces.",
-      treatment: [
-        "Remove infected leaves immediately",
-        "Apply copper-based fungicide spray",
-        "Increase spacing between plants",
-        "Water plants at soil level only",
-        "Disinfect gardening tools between uses"
-      ],
-      prevention: [
-        "Avoid watering leaves directly",
-        "Ensure good drainage in soil",
-        "Rotate crops annually",
-        "Use drip irrigation systems",
-        "Apply mulch to prevent soil splashing"
-      ]
-    },
-    {
-      disease: "Healthy Plant",
-      confidence: 96,
-      severity: 'low' as const,
-      description: "No disease detected. Your plant appears to be in excellent health!",
-      treatment: [
-        "Continue current care routine",
-        "Monitor plant regularly for changes",
-        "Maintain consistent watering schedule",
-        "Ensure adequate lighting conditions",
-        "Check for pests monthly"
-      ],
-      prevention: [
-        "Maintain proper watering schedule",
-        "Provide adequate sunlight exposure",
-        "Use well-draining soil",
-        "Fertilize appropriately for plant type",
-        "Inspect plants regularly for early detection"
-      ]
+const loadTreatmentDict = async () => {
+  if (!treatmentDict) {
+    const response = await fetch('/treatment_dict_complete.json');
+    treatmentDict = await response.json();
+  }
+  return treatmentDict;
+};
+
+const loadModel = async () => {
+  if (!model) {
+    try {
+      // Try to load from public folder first
+      model = await tf.loadLayersModel('/best_plant_model_final.keras');
+    } catch (error) {
+      console.error('Error loading model:', error);
+      throw new Error('Failed to load plant disease detection model');
     }
-  ];
+  }
+  return model;
+};
 
-  // Return random result for demonstration
-  return mockDiseases[Math.floor(Math.random() * mockDiseases.length)];
+const preprocessImage = async (file: File): Promise<tf.Tensor> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      
+      // Resize to model input size (assuming 224x224)
+      canvas.width = 224;
+      canvas.height = 224;
+      ctx.drawImage(img, 0, 0, 224, 224);
+      
+      // Convert to tensor and normalize
+      const tensor = tf.browser.fromPixels(canvas)
+        .expandDims(0)
+        .cast('float32')
+        .div(255.0);
+      
+      resolve(tensor);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+const realDiagnosis = async (file: File) => {
+  try {
+    // Load model and treatment dictionary
+    const [loadedModel, treatments] = await Promise.all([
+      loadModel(),
+      loadTreatmentDict()
+    ]);
+
+    // Preprocess the image
+    const processedImage = await preprocessImage(file);
+
+    // Make prediction
+    const prediction = loadedModel.predict(processedImage) as tf.Tensor;
+    const predictionData = await prediction.data();
+    
+    // Get the class with highest probability
+    const maxIndex = predictionData.indexOf(Math.max(...Array.from(predictionData)));
+    const confidence = Math.round(predictionData[maxIndex] * 100);
+    
+    // Get class name and treatment info
+    const className = treatments.classes[maxIndex];
+    const treatmentInfo = treatments.treatments[className];
+    
+    // Clean up tensors
+    processedImage.dispose();
+    prediction.dispose();
+    
+    if (!treatmentInfo) {
+      throw new Error('Treatment information not found for detected disease');
+    }
+
+    // Determine severity based on disease type
+    let severity: 'low' | 'medium' | 'high' = 'medium';
+    if (className.includes('healthy')) {
+      severity = 'low';
+    } else if (className.includes('blight') || className.includes('rot')) {
+      severity = 'high';
+    }
+
+    return {
+      disease: treatmentInfo.disease,
+      confidence,
+      severity,
+      description: treatmentInfo.description,
+      treatment: treatmentInfo.treatment,
+      prevention: treatmentInfo.prevention
+    };
+
+  } catch (error) {
+    console.error('Diagnosis error:', error);
+    throw error;
+  }
 };
 
 const saveDiagnosis = (file: File, result: any) => {
@@ -94,20 +125,47 @@ export const DiagnosisSection = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [diagnosisResult, setDiagnosisResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize TensorFlow.js and load model on component mount
+  useEffect(() => {
+    const initializeTensorFlow = async () => {
+      setModelLoading(true);
+      try {
+        // Set backend to webgl for better performance
+        await tf.setBackend('webgl');
+        await tf.ready();
+        
+        // Preload model and treatment dictionary
+        await Promise.all([loadModel(), loadTreatmentDict()]);
+        
+        console.log('Model and treatment dictionary loaded successfully');
+      } catch (error) {
+        console.error('Failed to initialize TensorFlow or load model:', error);
+        setError('Failed to load AI model. Please refresh the page.');
+      } finally {
+        setModelLoading(false);
+      }
+    };
+
+    initializeTensorFlow();
+  }, []);
 
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
     setDiagnosisResult(null);
+    setError(null);
     
     // Start analysis
     setIsAnalyzing(true);
     try {
-      const result = await mockDiagnosis(file);
+      const result = await realDiagnosis(file);
       setDiagnosisResult(result);
       saveDiagnosis(file, result);
     } catch (error) {
       console.error('Analysis failed:', error);
-      // Handle error state
+      setError('Failed to analyze the image. Please try again with a clear plant leaf image.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -117,6 +175,7 @@ export const DiagnosisSection = () => {
     setSelectedFile(null);
     setDiagnosisResult(null);
     setIsAnalyzing(false);
+    setError(null);
   };
 
   const handleNewDiagnosis = () => {
@@ -135,6 +194,16 @@ export const DiagnosisSection = () => {
             Upload a clear image of your plant's leaves to get instant AI-powered disease detection 
             and treatment recommendations.
           </p>
+          {modelLoading && (
+            <div className="mt-4 p-4 bg-primary/10 rounded-lg">
+              <p className="text-sm text-primary">Loading AI model, please wait...</p>
+            </div>
+          )}
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-lg">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8 items-start">
@@ -144,6 +213,7 @@ export const DiagnosisSection = () => {
               onFileSelect={handleFileSelect}
               selectedFile={selectedFile}
               onClearFile={handleClearFile}
+              disabled={modelLoading || isAnalyzing}
             />
 
             {/* Image Preview */}
