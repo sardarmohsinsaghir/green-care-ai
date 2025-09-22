@@ -2,77 +2,21 @@ import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { DiagnosisResults } from "./DiagnosisResults";
 
-// Mock AI diagnosis function
-const mockDiagnosis = async (file: File) => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 3000));
+// Real AI diagnosis function using the backend API
+const diagnosePlant = async (file: File) => {
+  const formData = new FormData();
+  formData.append('image', file);
 
-  // Mock results based on filename or random selection
-  const mockDiseases = [
-    {
-      disease: "Powdery Mildew",
-      confidence: 92,
-      severity: 'medium' as const,
-      description: "A fungal disease that appears as white powdery spots on leaves and stems.",
-      treatment: [
-        "Remove affected leaves and dispose of them away from healthy plants",
-        "Improve air circulation around the plant",
-        "Apply fungicidal soap or neem oil spray every 7-10 days",
-        "Reduce humidity levels around the plant",
-        "Water at soil level to avoid wetting leaves"
-      ],
-      prevention: [
-        "Ensure proper spacing between plants for air circulation",
-        "Avoid overhead watering",
-        "Monitor humidity levels regularly",
-        "Apply preventive fungicide during humid seasons",
-        "Remove debris and fallen leaves promptly"
-      ]
-    },
-    {
-      disease: "Leaf Spot Disease",
-      confidence: 87,
-      severity: 'low' as const,
-      description: "Bacterial or fungal infection causing dark spots on leaf surfaces.",
-      treatment: [
-        "Remove infected leaves immediately",
-        "Apply copper-based fungicide spray",
-        "Increase spacing between plants",
-        "Water plants at soil level only",
-        "Disinfect gardening tools between uses"
-      ],
-      prevention: [
-        "Avoid watering leaves directly",
-        "Ensure good drainage in soil",
-        "Rotate crops annually",
-        "Use drip irrigation systems",
-        "Apply mulch to prevent soil splashing"
-      ]
-    },
-    {
-      disease: "Healthy Plant",
-      confidence: 96,
-      severity: 'low' as const,
-      description: "No disease detected. Your plant appears to be in excellent health!",
-      treatment: [
-        "Continue current care routine",
-        "Monitor plant regularly for changes",
-        "Maintain consistent watering schedule",
-        "Ensure adequate lighting conditions",
-        "Check for pests monthly"
-      ],
-      prevention: [
-        "Maintain proper watering schedule",
-        "Provide adequate sunlight exposure",
-        "Use well-draining soil",
-        "Fertilize appropriately for plant type",
-        "Inspect plants regularly for early detection"
-      ]
-    }
-  ];
+  const response = await fetch('http://localhost:3001/api/diagnose', {
+    method: 'POST',
+    body: formData,
+  });
 
-  // Return random result for demonstration
-  return mockDiseases[Math.floor(Math.random() * mockDiseases.length)];
+  if (!response.ok) {
+    throw new Error('Failed to analyze image');
+  }
+
+  return await response.json();
 };
 
 const saveDiagnosis = (file: File, result: any) => {
@@ -102,12 +46,19 @@ export const DiagnosisSection = () => {
     // Start analysis
     setIsAnalyzing(true);
     try {
-      const result = await mockDiagnosis(file);
+      const result = await diagnosePlant(file);
       setDiagnosisResult(result);
       saveDiagnosis(file, result);
     } catch (error) {
       console.error('Analysis failed:', error);
-      // Handle error state
+      setDiagnosisResult({
+        disease: 'Analysis Failed',
+        confidence: 0,
+        severity: 'low',
+        description: 'Failed to analyze the image. Please try again with a clearer image.',
+        treatment: ['Try uploading a clearer image', 'Ensure good lighting in the photo'],
+        prevention: ['Take photos in good lighting', 'Focus on affected plant areas']
+      });
     } finally {
       setIsAnalyzing(false);
     }
